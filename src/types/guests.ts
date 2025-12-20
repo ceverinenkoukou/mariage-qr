@@ -6,7 +6,7 @@ export interface Guest {
     wedding_text: string;
     status: 'VIP' | 'STAND' | 'FAM' | 'AMI' | 'AUTRE';
     statut_guest: 'COUPLE' | 'SINGLE' | 'FAMILY';
-    table: string | null;
+    table: string ;
     scanned: boolean;
     created_at: string;
     scanned_at: string | null;

@@ -1,55 +1,52 @@
-import React from "react";
-import { useParams } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   CheckCircle2, 
   ArrowLeft,
-  AlertTriangle,
-  XCircle
+  XCircle,
+  User
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { getAllGuests, updateGuest } from "@/lib/services/guestService";
+import { Guest } from "@/types/guests";
 
 const ScanDirect = () => {
   const { data } = useParams<{ data: string }>();
   const navigate = useNavigate();
-  
-  // Decode the data
-  const decodedData = data ? decodeURIComponent(data) : "";
-  
-  // Get the QR code from the scanned data
-  const getQrCode = (data: string) => {
-    if (data.includes('|')) {
-      // Pipe-delimited format: qr_code|name|table|category|wedding_text
-      return data.split('|')[0];
-    } else if (data.includes('/invite/')) {
-      // URL format
-      return data.split('/').pop() || data;
-    }
-    // Direct QR code
-    return data;
-  };
-  
-  const qrCode = getQrCode(decodedData);
-  
+  const { toast } = useToast();
   const queryClient = useQueryClient();
-  
-  // Fetch guests to check if QR code has been scanned
-  const { data: guests = [], isLoading: guestsLoading } = useQuery({
+  const [hasProcessed, setHasProcessed] = useState(false);
+
+  const decodedData = data ? decodeURIComponent(data) : "";
+
+  const getQrCode = (input: string) => {
+    if (!input) return "";
+    if (input.includes('|')) return input.split('|')[0];
+    if (input.includes('/')) return input.split('/').filter(Boolean).pop() || input;
+    return input;
+  };
+
+  const qrCode = getQrCode(decodedData);
+
+  const { data: guests = [], isLoading } = useQuery({
     queryKey: ["guests"],
     queryFn: getAllGuests,
   });
-  
-  // Find the guest with this QR code
-  const guest = guests.find(g => g.qr_code === qrCode);
-  
-  // Check if already scanned
-  const isAlreadyScanned = guest ? guest.scanned : false;
-  
-  // Mutation to mark guest as scanned
-  const markAsScannedMutation = useMutation({
+
+  const guest = guests.find((g: Guest) => g.qr_code === qrCode);
+
+  // FONCTION DE FORMATAGE SÉCURISÉE
+  const formatTableName = (table: any) => {
+    if (!table) return "N/A";
+    if (typeof table === 'object' && table.name) return table.name;
+    return String(table);
+  };
+
+  const mutation = useMutation({
     mutationFn: (guestId: string) => 
       updateGuest(guestId, { 
         scanned: true, 
@@ -57,143 +54,61 @@ const ScanDirect = () => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests"] });
-    },
-    onError: (error) => {
-      console.error("Error marking guest as scanned:", error);
-    },
+      toast({ title: "Présence confirmée", description: "L'invité a été marqué comme présent." });
+    }
   });
-  
-  // Mark as scanned when component loads (if not already scanned)
-  React.useEffect(() => {
-    if (guest && !guest.scanned && !markAsScannedMutation.isPending) {
-      markAsScannedMutation.mutate(guest.id);
-    }
-  }, [guest, markAsScannedMutation.isPending]);
-  
-  // Parse the information from the QR code
-  const parseQRData = (data: string) => {
-    // Handle empty data
-    if (!data) {
-      return { 'Message': 'Aucune donnée scannée', 'Error': 'Données vides' };
-    }
-    
-    // For simple QR codes, we'll fetch the data from the backend
-    // Return minimal information for now
-    return { 'Code': data };
-  };
-  
-  const info = parseQRData(decodedData);
 
-  // Show loading state
-  if (guestsLoading || markAsScannedMutation.isPending) {
-    return (
-      <div className="flex items-center justify-center min-h-screen p-4 bg-slate-50">
-        <Card className="w-full max-w-md border-t-8 border-t-primary shadow-2xl bg-white">
-          <CardContent className="pt-8 text-center">
-            <div className="animate-pulse">Vérification de l'invitation...</div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-  
-  // Show error state if guest not found
-  if (!guest && qrCode) {
-    return (
-      <div className="flex items-center justify-center min-h-screen p-4 bg-slate-50">
-        <Card className="w-full max-w-md border-t-8 border-red-500 shadow-xl">
-          <CardContent className="pt-8 text-center space-y-4">
-            <XCircle className="h-16 w-16 text-red-500 mx-auto" />
-            <h2 className="text-2xl font-bold text-red-700">QR Code Invalide</h2>
-            <div className="bg-white p-4 rounded-lg border border-red-200">
-              <p className="text-sm text-slate-500 mt-1">Ce QR code n'est pas reconnu</p>
-            </div>
-            <Button 
-              className="w-full bg-primary hover:bg-primary/90 text-white" 
-              onClick={() => navigate('/scanner')}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" /> Retour au scanner
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (guest && !guest.scanned && !hasProcessed) {
+      setHasProcessed(true);
+      mutation.mutate(guest.id);
+    }
+  }, [guest, hasProcessed, mutation]);
 
-  // Show already scanned message
-  if (isAlreadyScanned) {
+  if (isLoading) return <div className="flex h-screen items-center justify-center">Chargement...</div>;
+
+  if (!guest) {
     return (
-      <div className="flex items-center justify-center min-h-screen p-4 bg-orange-50">
-        <Card className="w-full max-w-md border-t-8 border-orange-500 shadow-xl">
-          <CardContent className="pt-8 text-center space-y-4">
-            <AlertTriangle className="h-16 w-16 text-orange-500 mx-auto" />
-            <h2 className="text-2xl font-bold text-orange-800">Déjà Utilisé</h2>
-            <div className="bg-white p-4 rounded-lg border border-orange-200">
-              <p className="font-bold text-lg text-slate-800">{guest ? guest.name : 'Invité'}</p>
-              <p className="text-sm text-slate-500 mt-1">Ce QR code a déjà été scanné</p>
-            </div>
-            <Button 
-              variant="outline" 
-              className="w-full mt-4" 
-              onClick={() => navigate('/scanner')}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" /> Retour au scanner
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen p-4 flex flex-col items-center justify-center bg-slate-50">
+        <XCircle className="h-16 w-16 text-red-500 mb-4" />
+        <h2 className="text-2xl font-bold mb-2">QR Code Invalide</h2>
+        <Button onClick={() => navigate('/scanner')} variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Retour</Button>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4 bg-slate-50">
-      <Card className="w-full max-w-md border-t-8 border-t-primary shadow-2xl bg-white">
-        <CardHeader className="text-center pb-2">
-          <CheckCircle2 className="h-14 w-14 text-green-500 mx-auto mb-2" />
-          <CardTitle className="text-2xl font-serif text-primary uppercase tracking-widest">
-            Invitation Valide
-          </CardTitle>
-        </CardHeader>
-        
-        <CardContent className="space-y-6 pt-4 text-center">
-          {/* INFORMATIONS INVITÉ */}
-          <div>
-            <h2 className="text-2xl font-bold text-slate-800">{guest ? guest.name : 'Chargement...'}</h2>
-            <div className="flex flex-wrap justify-center gap-2 mt-4">
-              <div className="bg-emerald-600 text-sm px-4 py-1 text-white border-none rounded-full">
-                TABLE : {guest?.table || 'Non assignée'}
-              </div>
-              <div className="bg-blue-600 text-sm px-4 py-1 text-white border-none rounded-full">
-                Catégorie : {guest?.status || 'Non spécifiée'}
-              </div>
+    <div className="min-h-screen bg-slate-50 p-4">
+      <div className="max-w-md mx-auto space-y-6">
+        <Button variant="ghost" onClick={() => navigate('/scanner')}><ArrowLeft className="mr-2 h-4 w-4" /> Retour</Button>
+
+        <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
+          <div className={`h-2 ${guest.scanned ? 'bg-emerald-500' : 'bg-primary'}`} />
+          <CardHeader className="text-center">
+             <div className="mx-auto mb-4 bg-slate-100 h-20 w-20 rounded-full flex items-center justify-center">
+              <User className="h-12 w-12 text-slate-400" />
             </div>
-          </div>
-
-          <hr className="border-slate-100" />
-
-          {/* INFORMATIONS DE LA TABLE */}
-          <div className="space-y-4">
-            {/* MESSAGE PERSONNALISÉ (WEDDING TEXT) */}
-            <div className="relative p-6 bg-slate-50 rounded-2xl border border-slate-100">
-              <p className="text-slate-700 leading-relaxed text-sm whitespace-pre-line relative z-10 text-left">
-                {guest ? guest.wedding_text : 'Chargement...'}
-              </p>
+            <CardTitle className="text-2xl font-black uppercase">{guest.name}</CardTitle>
+            <div className="flex justify-center gap-2 mt-2">
+              <span className="bg-primary/10 text-primary text-[10px] font-bold px-3 py-1 rounded-full">
+                TABLE : {formatTableName(guest.table)}
+              </span>
             </div>
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest">
-              Informations lues le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}
-            </p>
-            <Button 
-              className="w-full bg-primary hover:bg-primary/90 text-white" 
-              onClick={() => navigate('/scanner')}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" /> Retour au scanner
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="p-6">
+            {guest.scanned && (
+              <div className="bg-emerald-50 p-4 rounded-2xl flex items-center gap-3 mb-6">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                <p className="text-emerald-800 font-bold text-sm">Entrée déjà validée</p>
+              </div>
+            )}
+            <div className="bg-slate-50 p-5 rounded-2xl border italic text-slate-600 text-sm mb-6">
+              {guest.wedding_text || "Bienvenue au mariage !"}
+            </div>
+            <Button className="w-full h-12 rounded-2xl font-bold" onClick={() => navigate('/scanner')}>Scanner un autre invité</Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

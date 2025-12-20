@@ -16,7 +16,7 @@ const Index = () => {
             Notre Mariage
           </h1>
           <p className="text-xl text-muted-foreground font-body max-w-2xl mx-auto">
-            Bienevenue au maraige de THEO et GAELLE
+            Bienvenu au maraige de THEO et GAELLE
           </p>
         </div>
 
