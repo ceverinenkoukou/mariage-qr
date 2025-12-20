@@ -1,0 +1,238 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { ArrowLeft, Plus, Trash2, Edit, QrCode, Users, Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import QRCodeDisplay from "@/components/QRCodeDisplay";
+import { getAllGuests, createGuest, updateGuest, deleteGuest } from "@/lib/services/guestService";
+import { tableweddingService } from "@/lib/services/tableService";
+import { Guest } from "@/types/guests";
+
+const Guests = () => {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
+  const [showQRDialog, setShowQRDialog] = useState(false);
+  const [qrGuest, setQrGuest] = useState<Guest | null>(null);
+  
+  // Debugging: log qrGuest changes
+  useEffect(() => {
+    if (qrGuest) {
+      console.log("QR Guest data:", qrGuest);
+    }
+  }, [qrGuest]);
+  
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // 1. Récupération des invités et des tables (créées manuellement)
+  const { data: guests = [] } = useQuery({ queryKey: ["guests"], queryFn: getAllGuests });
+  const { data: tables = [] } = useQuery({ queryKey: ["tables"], queryFn: tableweddingService.getAllTables });
+
+  // 2. Logique de calcul du remplissage
+  const getTableOccupancy = (tableId: string) => {
+    return guests.filter(g => g.table === tableId).length;
+  };
+  
+  const getTableName = (tableId: string | null) => {
+    if (!tableId) return null;
+    const table = tables.find(t => t.id === tableId);
+    return table ? table.name : null;
+  };
+  const getTableCategory = (tableId: string | null) => {
+    if (!tableId) return null;
+    const table = tables.find(t => t.id === tableId);
+    return table ? table.category : null;
+  }
+
+  const mutation = useMutation({
+    mutationFn: (data: any) => selectedGuest ? updateGuest(selectedGuest.id, data) : createGuest(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guests"] });
+      setIsDialogOpen(false);
+      setSelectedGuest(null);
+      toast({ title: "Enregistrement réussi" });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const tableId = formData.get("table") as string;
+    
+    // Vérification de sécurité : pas plus de 10 personnes
+    const count = getTableOccupancy(tableId);
+    const isFull = count >= 10;
+    if (!selectedGuest && isFull) {
+        toast({ 
+            variant: "destructive", 
+            title: "Table saturée", 
+            description: "Cette table a déjà atteint sa limite de 10 personnes." 
+        });
+        return;
+    }
+
+    mutation.mutate({
+      name: formData.get("name"),
+      table: tableId,
+      status: formData.get("status"),
+      statut_guest: formData.get("statut_guest"),
+      wedding_text: formData.get("wedding_text"),
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* EN-TÊTE AVEC RÉCAPITULATIF */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+                <Button variant="ghost" size="icon" asChild className="h-8 w-8"><Link to="/"><ArrowLeft className="h-4 w-4"/></Link></Button>
+                <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1>
+            </div>
+            <p className="text-sm text-slate-500 ml-10">
+                {guests.length} invités enregistrés sur 370 places disponibles
+            </p>
+          </div>
+          <Button onClick={() => { setSelectedGuest(null); setIsDialogOpen(true); }} className="bg-primary shadow-lg">
+            <Plus className="mr-2 h-4 w-4" /> Ajouter un invité
+          </Button>
+        </div>
+
+        {/* LISTE DES INVITÉS SOUS FORME DE GRILLE */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {guests.map((guest) => (
+            <Card key={guest.id} className="border-none shadow-sm hover:shadow-md transition-all">
+              <CardContent className="p-5">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-slate-800">{guest.name}</h3>
+                    <div className="flex gap-2">
+                        <Badge variant="secondary" className="text-[10px] uppercase">{getTableName(guest.table) || "Pas de table"}</Badge>
+                        <Badge className="bg-slate-100 text-slate-600 border-none text-[10px] uppercase">{getTableCategory(guest.table) || guest.status}</Badge>
+                    </div>
+                  </div>
+                  {guest.scanned && <Badge className="bg-emerald-500">Présent</Badge>}
+                </div>
+                
+                <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-50">
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => { setQrGuest(guest); setShowQRDialog(true); }}>
+                    <QrCode className="h-4 w-4 mr-2" /> QR
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => { setSelectedGuest(guest); setIsDialogOpen(true); }}>
+                    <Edit className="h-4 w-4 mr-2" /> Éditer
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* DIALOG FORMULAIRE */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{selectedGuest ? "Modifier l'invité" : "Nouvel Invité"}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Nom complet</Label>
+                <Input name="name" defaultValue={selectedGuest?.name} required placeholder="Ex: Mme Gaëlle Minko" />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Attribuer une table (Max 10 pers.)</Label>
+                <Select name="table" defaultValue={selectedGuest?.table || ""}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionnez une table" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tables.map((t) => {
+                      const count = getTableOccupancy(t.id);
+                      const isFull = count >= 10;
+                      return (
+                        <SelectItem key={t.id} value={t.id} disabled={isFull && (selectedGuest?.table !== t.id)}>
+                          {t.name} ({count}/10 places) - {t.category}
+                        </SelectItem>
+                      );
+                    })}
+                    {tables.length === 0 && <SelectItem value="none" disabled>Aucune table créée dans "Gestion Tables"</SelectItem>}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <Info className="h-3 w-3" /> Seules les tables créées manuellement apparaissent ici.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Type d'accès</Label>
+                  <Select name="status" defaultValue={selectedGuest?.status || "STAND"}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VIP">💎 VIP</SelectItem>
+                      <SelectItem value="STAND">🍷 Standard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Accompagnement</Label>
+                  <Select name="statut_guest" defaultValue={selectedGuest?.statut_guest || "SINGLE"}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="COUPLE">👫 Couple</SelectItem>
+                      <SelectItem value="FAMILLE">👨‍👩‍👧‍👦 Famille</SelectItem>
+                      <SelectItem value="SINGLE">👤 Seul(e)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Texte personnalisé (facultatif)</Label>
+                <Textarea name="wedding_text" defaultValue={selectedGuest?.wedding_text} placeholder="Un message spécial pour cet invité..." className="h-20" />
+              </div>
+
+              <DialogFooter>
+                <Button type="submit" className="w-full" disabled={mutation.isPending}>
+                  {mutation.isPending ? "Traitement..." : "Enregistrer l'invité"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* DIALOG QR CODE */}
+        <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
+          <DialogContent className="max-w-xs">
+            <DialogHeader><DialogTitle className="text-center">{qrGuest?.name}</DialogTitle></DialogHeader>
+            {qrGuest && (
+              <div className="flex flex-col items-center p-4">
+                {qrGuest && (
+                  <QRCodeDisplay 
+                    value={`${window.location.origin}/scan-direct/${qrGuest.qr_code}`} 
+                    guestName={qrGuest.name}
+                    tableName={getTableName(qrGuest.table) || ""}
+                                        
+                  />
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+      </div>
+    </div>
+  );
+};
+
+export default Guests;
