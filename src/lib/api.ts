@@ -2,7 +2,7 @@ import type { AxiosInstance, AxiosResponse } from "axios";
 import axios from "axios";
 
 // Base API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || "https://qrcode-toqa.onrender.com";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://qrcode-toqa.onrender.com/api";
 
 export const api = axios.create({
     baseURL: API_BASE_URL,
