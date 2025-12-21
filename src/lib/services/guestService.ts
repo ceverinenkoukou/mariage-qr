@@ -115,3 +115,5 @@ export const scanGuestQRCode = async (code: string): Promise<ScanResult> => {
     throw handleApiError(error);
   }
 };
+
+// Dans guestService.ts
