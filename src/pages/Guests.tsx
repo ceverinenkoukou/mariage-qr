@@ -404,11 +404,12 @@ const Guests = () => {
             </DialogHeader>
             {qrGuest && (
               <div className="flex flex-col items-center p-4">
-                <QRCodeDisplay 
-                  value={`${window.location.origin}/scan-direct/${qrGuest.qr_code}`} 
-                  guestName={qrGuest.name}
-                  tableName={getTableName(qrGuest.table) || ""}
-                />
+               <QRCodeDisplay 
+  // Remplacez 'scan-direct' par 'invitation'
+  value={`${window.location.origin}/invitation/${qrGuest.qr_code}`} 
+  guestName={qrGuest.name}
+  tableName={getTableName(qrGuest.table) || ""}
+/>
               </div>
             )}
           </DialogContent>

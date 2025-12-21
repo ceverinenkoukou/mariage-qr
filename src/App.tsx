@@ -11,6 +11,7 @@ import Invite from "./pages/Invite";
 import NotFound from "./pages/NotFound";
 import ScanResult from "./pages/ScanResult";
 import ScanDirect from "./pages/ScanDirect";
+import Invitation from "./pages/Invitation";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/tables" element={<Tables />} />
           <Route path="/invite/:qrCode" element={<Invite />} />
           <Route path="/scan-result/:qrCode" element={<ScanResult />} />
+          <Route path="/invitation/:code" element={<Invitation />} />
           <Route path="/scan-direct/:data" element={<ScanDirect />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
