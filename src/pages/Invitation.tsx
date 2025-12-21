@@ -45,15 +45,53 @@ const Invitation = () => {
           </div>
 
           {/* Programme / Texte personnalisé */}
-          <div className="bg-slate-50 p-6 rounded-2xl border border-dashed border-slate-200">
-            <div className="flex items-center gap-2 mb-3 text-[#70372c]">
-              <Info className="h-4 w-4" />
-              <span className="text-xs font-bold uppercase">À savoir</span>
-            </div>
-            <p className="text-sm text-slate-600 leading-relaxed italic whitespace-pre-line">
-              {guest.wedding_text || "Nous avons hâte de célébrer ce moment magique avec vous !"}
-            </p>
-          </div>
+          // Remplacez la partie qui affiche le guest.wedding_text par ceci :
+
+<div className="space-y-6 text-slate-700 leading-relaxed text-sm text-center">
+  {guest.wedding_text.split('\n').map((line, index) => {
+    const trimmedLine = line.trim();
+    
+    // Style pour les titres (INVITATION et PROGRAMME)
+    if (trimmedLine === "✨ INVITATION ✨" || trimmedLine === "✨ PROGRAMME ✨") {
+      return (
+        <div key={index} className="py-4">
+          <h2 className="text-xl font-serif font-bold text-[#70372c] uppercase tracking-widest inline-block border-b-2 border-[#70372c] pb-1">
+            {trimmedLine}
+          </h2>
+        </div>
+      );
+    }
+
+    // Style pour les noms des mariés (plus gros et élégant)
+    if (trimmedLine.includes("💍")) {
+      return (
+        <p key={index} className="text-lg font-bold text-[#70372c] py-4 leading-snug">
+          {trimmedLine}
+        </p>
+      );
+    }
+
+    // Style pour le programme (aligné à gauche pour plus de lisibilité)
+    if (trimmedLine.startsWith("⭐")) {
+      return (
+        <p key={index} className="text-left pl-4 py-1 flex items-start gap-3">
+          <span className="text-orange-400">{trimmedLine.slice(0, 1)}</span>
+          <span>{trimmedLine.slice(2)}</span>
+        </p>
+      );
+    }
+
+    // Lignes vides
+    if (trimmedLine === "") return <div key={index} className="h-2" />;
+
+    // Texte normal
+    return (
+      <p key={index} className="px-2">
+        {trimmedLine}
+      </p>
+    );
+  })}
+</div>
           
           <div className="text-center pt-4">
              <p className="text-[10px] text-slate-300 uppercase">Présentez ce code à l'accueil le jour J</p>
