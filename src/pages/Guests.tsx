@@ -43,21 +43,9 @@ const Guests = () => {
   const { data: guests = [] } = useQuery({ queryKey: ["guests"], queryFn: getAllGuests });
   const { data: tables = [] } = useQuery({ queryKey: ["tables"], queryFn: tableweddingService.getAllTables });
 
-  // Filtrer les invités en fonction de la recherche
-  const filteredGuests = useMemo(() => {
-    if (!searchQuery.trim()) return guests;
-    
-    const query = searchQuery.toLowerCase().trim();
-    return guests.filter(guest => 
-      guest.name.toLowerCase().includes(query) ||
-      getTableName(guest.table)?.toLowerCase().includes(query) ||
-      getTableCategory(guest.table)?.toLowerCase().includes(query)
-    );
-  }, [guests, searchQuery, tables]);
-
   // 2. Logique de calcul du remplissage
   const getTableOccupancy = (tableId: string) => {
-    return guests.filter(g => g.table === tableId).length;
+    return guests.filter(guest => guest.table === tableId).length;
   };
   
   const getTableName = (tableId: any) => {
@@ -70,6 +58,18 @@ const Guests = () => {
     const table = tables.find(t => t.id === tableId);
     return table ? table.category : null;
   }
+
+  // Filtrer les invités en fonction de la recherche
+  const filteredGuests = useMemo(() => {
+    if (!searchQuery.trim()) return guests;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return guests.filter(guest => 
+      guest.name.toLowerCase().includes(query) ||
+      getTableName(guest.table)?.toLowerCase().includes(query) ||
+      getTableCategory(guest.table)?.toLowerCase().includes(query)
+    );
+  }, [guests, searchQuery, tables]);
 
   // Mutation pour créer/modifier un invité
   const mutation = useMutation({
@@ -206,7 +206,6 @@ const Guests = () => {
                   <Link to="/"><ArrowLeft className="h-4 w-4"/></Link>
                 </Button>
                 <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1>
-               <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1>
             </div>
             <p className="text-sm text-slate-500 ml-10">
                 {filteredGuests.length} invité{filteredGuests.length > 1 ? 's' : ''} affiché{filteredGuests.length > 1 ? 's' : ''} sur {guests.length} au total
@@ -378,7 +377,7 @@ const Guests = () => {
         )
         }
 
-        {/* DIALOG FORMULAIRE  */}
+        {/* DIALOG FORMULAIRE d'INVITÉ  */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -439,7 +438,7 @@ const Guests = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Texte personnalisé (facultatif)</Label>
+                <Label>Texte personnalisé </Label>
                 <Textarea name="wedding_text" defaultValue={selectedGuest?.wedding_text} placeholder="Un message spécial pour cet invité..." className="h-20" />
               </div>
 
