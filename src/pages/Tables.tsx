@@ -1,22 +1,29 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2, Edit, Users, LayoutGrid } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, Users, LayoutGrid, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { tableweddingService } from "@/lib/services/tableService";
 import { Table } from "@/types/tables";
 
 const Tables = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [tableToDelete, setTableToDelete] = useState<Table | null>(null);
+  const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -48,12 +55,48 @@ const Tables = () => {
     },
   });
 
+  // Mutation pour supprimer une table
   const deleteMutation = useMutation({
     mutationFn: tableweddingService.deleteTable,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tables"] });
-      toast({ title: "Table supprimée" });
+      setShowDeleteDialog(false);
+      setTableToDelete(null);
+      toast({ title: "Table supprimée", description: "La table a été supprimée avec succès." });
     },
+    onError: (error) => {
+      toast({ 
+        variant: "destructive",
+        title: "Erreur de suppression", 
+        description: "Impossible de supprimer la table. Veuillez réessayer." 
+      });
+      console.error("Delete error:", error);
+    }
+  });
+
+  // Mutation pour suppression en masse
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (tableIds: string[]) => {
+      await Promise.all(tableIds.map(id => tableweddingService.deleteTable(id)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
+      setShowBulkDeleteDialog(false);
+      setSelectedTableIds([]);
+      setIsSelectionMode(false);
+      toast({ 
+        title: "Tables supprimées", 
+        description: `${selectedTableIds.length} table(s) ont été supprimées.` 
+      });
+    },
+    onError: (error) => {
+      toast({ 
+        variant: "destructive",
+        title: "Erreur de suppression", 
+        description: "Impossible de supprimer certaines tables. Veuillez réessayer." 
+      });
+      console.error("Bulk delete error:", error);
+    }
   });
 
   const resetForm = () => {
@@ -77,6 +120,44 @@ const Tables = () => {
     tableMutation.mutate(formData);
   };
 
+  // Gestion de la sélection
+  const handleSelectTable = (tableId: string) => {
+    setSelectedTableIds(prev => 
+      prev.includes(tableId) 
+        ? prev.filter(id => id !== tableId)
+        : [...prev, tableId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTableIds.length === tables.length) {
+      setSelectedTableIds([]);
+    } else {
+      setSelectedTableIds(tables.map(t => t.id));
+    }
+  };
+
+  const handleDeleteSingle = (table: Table) => {
+    setTableToDelete(table);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeleteSingle = () => {
+    if (tableToDelete) {
+      deleteMutation.mutate(tableToDelete.id);
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedTableIds.length > 0) {
+      setShowBulkDeleteDialog(true);
+    }
+  };
+
+  const confirmBulkDelete = () => {
+    bulkDeleteMutation.mutate(selectedTableIds);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -90,20 +171,87 @@ const Tables = () => {
               <p className="text-slate-500 text-sm">{tables.length} tables configurées</p>
             </div>
           </div>
-          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-primary">
-            <Plus className="mr-2 h-4 w-4" /> Créer une table
-          </Button>
+          
+          <div className="flex gap-2">
+            {!isSelectionMode ? (
+              <>
+                <Button 
+                  onClick={() => setIsSelectionMode(true)} 
+                  variant="outline"
+                  className="border-slate-300"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Sélectionner
+                </Button>
+                <Button 
+                  onClick={() => { resetForm(); setIsDialogOpen(true); }} 
+                  className="bg-primary"
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Créer une table
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button 
+                  onClick={handleSelectAll} 
+                  variant="outline"
+                  className="border-slate-300"
+                >
+                  {selectedTableIds.length === tables.length ? "Tout désélectionner" : "Tout sélectionner"}
+                </Button>
+                <Button 
+                  onClick={handleBulkDelete} 
+                  variant="destructive"
+                  disabled={selectedTableIds.length === 0}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> 
+                  Supprimer ({selectedTableIds.length})
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setIsSelectionMode(false);
+                    setSelectedTableIds([]);
+                  }} 
+                  variant="ghost"
+                >
+                  Annuler
+                </Button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* GRILLE DES TABLES */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tables.map((table) => (
-            <Card key={table.id} className="overflow-hidden border-none shadow-sm hover:shadow-md transition-all">
+            <Card 
+              key={table.id} 
+              className={`overflow-hidden border-none shadow-sm hover:shadow-md transition-all ${
+                selectedTableIds.includes(table.id) ? 'ring-2 ring-primary bg-primary/5' : ''
+              }`}
+            >
               <CardHeader className="pb-2 flex flex-row items-center justify-between bg-white">
                 <div className="space-y-1">
+                  {isSelectionMode && (
+                    <div className="flex items-center mb-2">
+                      <Checkbox 
+                        checked={selectedTableIds.includes(table.id)}
+                        onCheckedChange={() => handleSelectTable(table.id)}
+                        id={`select-${table.id}`}
+                      />
+                      <label 
+                        htmlFor={`select-${table.id}`} 
+                        className="ml-2 text-xs text-slate-600 cursor-pointer"
+                      >
+                        Sélectionner
+                      </label>
+                    </div>
+                  )}
                   <CardTitle className="text-xl font-bold text-primary">{table.name}</CardTitle>
                   <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
-                    {table.category === 'STAND' ? 'Standard' : table.category}
+                    {table.category === 'STAND' ? 'Standard' : 
+                     table.category === 'VIP' ? 'VIP' :
+                     table.category === 'FAM' ? 'Famille' :
+                     table.category === 'AMI' ? 'Amis' : table.category}
                   </Badge>
                 </div>
                 <div className="text-right">
@@ -122,24 +270,33 @@ const Tables = () => {
                 {/* BARRE DE REMPLISSAGE VISUELLE */}
                 <div className="w-full bg-slate-100 h-1.5 rounded-full mb-4 overflow-hidden">
                   <div 
-                    className={`h-full transition-all ${ (table.occupancy || 0) >= table.capacity ? 'bg-red-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${((table.occupancy || 0) / table.capacity) * 100}%` }}
+                    className={`h-full transition-all ${
+                      (table.occupancy || 0) >= table.capacity ? 'bg-red-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min(((table.occupancy || 0) / table.capacity) * 100, 100)}%` }}
                   ></div>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(table)}>
-                    <Edit className="h-4 w-4 mr-2" /> Modifier
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                    onClick={() => { if(confirm("Supprimer cette table ?")) deleteMutation.mutate(table.id) }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                {!isSelectionMode && (
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1" 
+                      onClick={() => handleEdit(table)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" /> Modifier
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="border-red-200 text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteSingle(table)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -209,7 +366,9 @@ const Tables = () => {
               </div>
 
               <DialogFooter className="gap-2 sm:gap-0">
-                <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
+                <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)}>
+                  Annuler
+                </Button>
                 <Button type="submit" disabled={tableMutation.isPending} className="bg-primary px-8">
                   {tableMutation.isPending ? "Enregistrement..." : "Valider"}
                 </Button>
@@ -217,6 +376,77 @@ const Tables = () => {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* DIALOG CONFIRMATION SUPPRESSION UNIQUE */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+                Confirmer la suppression
+              </DialogTitle>
+              <DialogDescription className="pt-4">
+                Êtes-vous sûr de vouloir supprimer la table <strong>{tableToDelete?.name}</strong> ?
+                <br /><br />
+                <span className="text-red-600 font-medium">
+                  Cette action est irréversible. Les invités assignés à cette table devront être réassignés.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDeleteDialog(false)}
+                disabled={deleteMutation.isPending}
+              >
+                Annuler
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={confirmDeleteSingle}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? "Suppression..." : "Supprimer"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* DIALOG CONFIRMATION SUPPRESSION EN MASSE */}
+        <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+                Confirmer la suppression en masse
+              </DialogTitle>
+              <DialogDescription className="pt-4">
+                Êtes-vous sûr de vouloir supprimer <strong>{selectedTableIds.length} table(s)</strong> ?
+                <br /><br />
+                <span className="text-red-600 font-medium">
+                  Cette action est irréversible. Les invités assignés à ces tables devront être réassignés.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowBulkDeleteDialog(false)}
+                disabled={bulkDeleteMutation.isPending}
+              >
+                Annuler
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={confirmBulkDelete}
+                disabled={bulkDeleteMutation.isPending}
+              >
+                {bulkDeleteMutation.isPending ? "Suppression..." : `Supprimer ${selectedTableIds.length} table(s)`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
   );
