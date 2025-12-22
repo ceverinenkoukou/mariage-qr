@@ -1,18 +1,33 @@
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getAllGuests } from "@/lib/services/guestService";
+import { tableweddingService } from "@/lib/services/tableService";
 import { Card, CardContent } from "@/components/ui/card";
 import { User, MapPin, Calendar, Info } from "lucide-react";
 
 const Invitation = () => {
   const { code } = useParams<{ code: string }>();
   
-  const { data: guests = [], isLoading } = useQuery({
+  const { data: guests = [], isLoading: isLoadingGuests } = useQuery({
     queryKey: ["guests"],
     queryFn: getAllGuests,
   });
+  
+  const { data: tables = [], isLoading: isLoadingTables } = useQuery({
+    queryKey: ["tables"],
+    queryFn: tableweddingService.getAllTables,
+  });
+  
+  const isLoading = isLoadingGuests || isLoadingTables;
 
   const guest = guests.find(g => g.qr_code === code);
+
+  // Function to get table name from table ID
+  const getTableName = (tableId: string | null) => {
+    if (!tableId) return "Sera assignée à l'entrée";
+    const table = tables.find(t => t.id === tableId);
+    return table ? table.name : `Table ${tableId}`;
+  };
 
   if (isLoading) return <div className="flex h-screen items-center justify-center italic">Chargement de votre invitation...</div>;
   if (!guest) return <div className="p-10 text-center">Invitation introuvable.</div>;
@@ -40,7 +55,7 @@ const Invitation = () => {
             </div>
             <div>
               <p className="text-xs text-slate-400 uppercase font-bold">Votre Table</p>
-              <p className="text-lg font-bold text-slate-800">{guest.table || "Sera assignée à l'entrée"}</p>
+              <p className="text-lg font-bold text-slate-800">{getTableName(guest.table)}</p>
             </div>
           </div>
 

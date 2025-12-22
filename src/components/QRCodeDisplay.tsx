@@ -48,7 +48,7 @@ const QRCodeDisplay = ({ value, guestName, tableName }: QRCodeDisplayProps) => {
       )}
       <canvas ref={canvasRef} className="rounded-lg shadow-md" />
       <div className="text-xs text-gray-500 text-center break-all p-2 bg-gray-50 rounded">
-        Code: {value}
+        URL: {value}
       </div>
       <Button onClick={downloadQR} variant="outline" className="w-full">
         <Download className="h-4 w-4 mr-2" />

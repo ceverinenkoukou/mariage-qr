@@ -51,6 +51,8 @@ const ScanDirect = () => {
 
   const guest = guests.find((g) => g.qr_code === qrCode);
 
+  
+
   // 3. Fonction améliorée pour afficher le NOM de la table
   const formatTableName = (tableId: any) => {
     if (!tableId) return "Non assignée";

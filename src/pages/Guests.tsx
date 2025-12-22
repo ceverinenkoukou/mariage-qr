@@ -47,11 +47,10 @@ const Guests = () => {
     return guests.filter(g => g.table === tableId).length;
   };
   
-  const getTableName = (tableId: string | null) => {
-    if (!tableId) return null;
-    const table = tables.find(t => t.id === tableId);
-    return table ? table.name : null;
-  };
+  const getTableName = (tableId: any) => {
+  const table = tables.find((t: any) => String(t.id) === String(tableId));
+  return table ? table.name : "N/A";
+};
   
   const getTableCategory = (tableId: string | null) => {
     if (!tableId) return null;
