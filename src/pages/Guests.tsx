@@ -455,25 +455,27 @@ const Guests = () => {
         </Dialog>
 
         {/* DIALOG QR CODE - URL COMPLÈTE */}
-        <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
-          <DialogContent className="max-w-xs">
-            <DialogHeader>
-              <DialogTitle className="text-center">{qrGuest?.name}</DialogTitle>
-            </DialogHeader>
-            {qrGuest && (
-              <div className="flex flex-col items-center p-4">
-                <QRCodeDisplay 
-                  value={getGuestQRUrl(qrGuest)}
-                  guestName={qrGuest.name}
-                  tableName={getTableName(qrGuest.table) || ""}
-                />
-                <p className="text-xs text-slate-500 mt-4 text-center">
-                  Scannez ce QR code pour voir vos informations
-                </p>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        {/* DIALOG QR CODE */}
+<Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
+  <DialogContent className="max-w-md"> {/* Augmenté pour mieux voir le texte */}
+    <DialogHeader>
+      <DialogTitle className="text-center">QR Code de {qrGuest?.name}</DialogTitle>
+    </DialogHeader>
+    {qrGuest && (
+      <div className="flex flex-col items-center p-4">
+        <QRCodeDisplay 
+          // ICI : On construit le texte brut qui s'affichera directement au scan
+          value={`NOM: ${qrGuest.name}\nTABLE: ${getTableName(qrGuest.table) || "Non assignée"}\n\n${qrGuest.wedding_text}`} 
+          guestName={qrGuest.name}
+          tableName={getTableName(qrGuest.table) || ""}
+        />
+        <p className="text-[10px] text-slate-400 mt-4 text-center">
+          Note : Ce QR code contient directement vos informations textuelles.
+        </p>
+      </div>
+    )}
+  </DialogContent>
+</Dialog>
 
         {/* DIALOGS DE CONFIRMATION */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
