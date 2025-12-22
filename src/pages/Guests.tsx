@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2, Edit, QrCode, Users, Info, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, QrCode, Users, Info, AlertTriangle, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ const Guests = () => {
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   
   // Debugging: log qrGuest changes
   useEffect(() => {
@@ -41,6 +42,18 @@ const Guests = () => {
   // 1. Récupération des invités et des tables (créées manuellement)
   const { data: guests = [] } = useQuery({ queryKey: ["guests"], queryFn: getAllGuests });
   const { data: tables = [] } = useQuery({ queryKey: ["tables"], queryFn: tableweddingService.getAllTables });
+
+  // Filtrer les invités en fonction de la recherche
+  const filteredGuests = useMemo(() => {
+    if (!searchQuery.trim()) return guests;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return guests.filter(guest => 
+      guest.name.toLowerCase().includes(query) ||
+      getTableName(guest.table)?.toLowerCase().includes(query) ||
+      getTableCategory(guest.table)?.toLowerCase().includes(query)
+    );
+  }, [guests, searchQuery, tables]);
 
   // 2. Logique de calcul du remplissage
   const getTableOccupancy = (tableId: string) => {
@@ -153,10 +166,10 @@ const Guests = () => {
   };
 
   const handleSelectAll = () => {
-    if (selectedGuestIds.length === guests.length) {
+    if (selectedGuestIds.length === filteredGuests.length) {
       setSelectedGuestIds([]);
     } else {
-      setSelectedGuestIds(guests.map(g => g.id));
+      setSelectedGuestIds(filteredGuests.map(g => g.id));
     }
   };
 
@@ -193,10 +206,11 @@ const Guests = () => {
                   <Link to="/"><ArrowLeft className="h-4 w-4"/></Link>
                 </Button>
                 <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1>
-               <h1 className="text-2xl font-bold text-slate-900 font-serif">LA TABLE 38 CORRESPOND A LA TABLE 9 </h1>
+               <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1>
             </div>
             <p className="text-sm text-slate-500 ml-10">
-                {guests.length} invités enregistrés sur 370 places disponibles
+                {filteredGuests.length} invité{filteredGuests.length > 1 ? 's' : ''} affiché{filteredGuests.length > 1 ? 's' : ''} sur {guests.length} au total
+                {searchQuery && ` pour "${searchQuery}"`}
             </p>
           </div>
           
@@ -224,7 +238,7 @@ const Guests = () => {
                   variant="outline"
                   className="border-slate-300"
                 >
-                  {selectedGuestIds.length === guests.length ? "Tout désélectionner" : "Tout sélectionner"}
+                  {selectedGuestIds.length === filteredGuests.length ? "Tout désélectionner" : "Tout sélectionner"}
                 </Button>
                 <Button 
                   onClick={handleBulkDelete} 
@@ -248,9 +262,35 @@ const Guests = () => {
           </div>
         </div>
 
+        {/* Barre de recherche */}
+        <div className="max-w-md mx-auto w-full">
+          <div className="relative">
+            <Input
+              type="text"
+              placeholder="Rechercher par nom, table ou catégorie..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-10 py-2 w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400" />
+            </div>
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              >
+                <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* LISTE DES INVITÉS SOUS FORME DE GRILLE */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {guests.map((guest) => (
+          {filteredGuests.map((guest) => (
             <Card 
               key={guest.id} 
               className={`border-none shadow-sm hover:shadow-md transition-all ${
@@ -322,6 +362,20 @@ const Guests = () => {
             </Card>
           ))}
         </div>
+
+        {/* Message quand aucun résultat */}
+        {searchQuery && filteredGuests.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Aucun invité trouvé pour "<span className="font-semibold">{searchQuery}</span>"</p>
+            <Button 
+              variant="outline" 
+              className="mt-4"
+              onClick={() => setSearchQuery('')}
+            >
+              Réinitialiser la recherche
+            </Button>
+          </div>
+        )
 
         {/* DIALOG FORMULAIRE */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
