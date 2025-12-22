@@ -15,9 +15,8 @@ const QRCodeDisplay = ({ value, guestName, tableName }: QRCodeDisplayProps) => {
   useEffect(() => {
     if (canvasRef.current && value) {
       QRCode.toCanvas(canvasRef.current, value, {
-        width: 300, // Reduced size for better readability
+        width: 300,
         margin: 2,
-        errorCorrectionLevel: 'M', // Medium error correction
         color: {
           dark: "#70372c",
           light: "#ffffff",
@@ -49,7 +48,7 @@ const QRCodeDisplay = ({ value, guestName, tableName }: QRCodeDisplayProps) => {
       )}
       <canvas ref={canvasRef} className="rounded-lg shadow-md" />
       <div className="text-xs text-gray-500 text-center break-all p-2 bg-gray-50 rounded">
-        URL: {value}
+        Code: {value}
       </div>
       <Button onClick={downloadQR} variant="outline" className="w-full">
         <Download className="h-4 w-4 mr-2" />
