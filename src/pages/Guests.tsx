@@ -219,7 +219,7 @@ const Guests = () => {
               <div className="flex flex-col items-center p-4">
                 {qrGuest && (
                   <QRCodeDisplay 
-                    value={`${window.location.origin}/scan-direct/${qrGuest.qr_code}`} 
+                    value={`${window.location.origin}/invitation/${qrGuest.qr_code}`} 
                     guestName={qrGuest.name}
                     tableName={getTableName(qrGuest.table) || ""}
                                         
