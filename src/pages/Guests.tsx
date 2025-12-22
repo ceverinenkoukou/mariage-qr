@@ -464,13 +464,13 @@ const Guests = () => {
     {qrGuest && (
       <div className="flex flex-col items-center p-4">
         <QRCodeDisplay 
-          // ICI : On construit le texte brut qui s'affichera directement au scan
-          value={`NOM: ${qrGuest.name}\nTABLE: ${getTableName(qrGuest.table) || "Non assignée"}\n\n${qrGuest.wedding_text}`} 
+          // Utilisation d'une URL pour rendre le QR code plus lisible
+          value={`${window.location.origin}/invitation/${qrGuest.qr_code}`} 
           guestName={qrGuest.name}
           tableName={getTableName(qrGuest.table) || ""}
         />
         <p className="text-[10px] text-slate-400 mt-4 text-center">
-          Note : Ce QR code contient directement vos informations textuelles.
+          Note : Ce QR code redirige vers une page avec toutes les informations de l'invité.
         </p>
       </div>
     )}
