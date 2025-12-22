@@ -15,8 +15,9 @@ const QRCodeDisplay = ({ value, guestName, tableName }: QRCodeDisplayProps) => {
   useEffect(() => {
     if (canvasRef.current && value) {
       QRCode.toCanvas(canvasRef.current, value, {
-        width: 400,
+        width: 600, // On double la taille de rendu pour la netteté
         margin: 2,
+        errorCorrectionLevel: 'L',
         color: {
           dark: "#70372c",
           light: "#ffffff",
