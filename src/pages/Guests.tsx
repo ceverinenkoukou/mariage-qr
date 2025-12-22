@@ -378,7 +378,7 @@ const Guests = () => {
         )
         }
 
-        {/* DIALOG FORMULAIRE */}
+        {/* DIALOG FORMULAIRE  */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -480,7 +480,7 @@ const Guests = () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
                 <AlertTriangle className="h-5 w-5" />
-                Confirmer la suppression
+                Confirmer la suppression d'un invité
               </DialogTitle>
               <DialogDescription className="pt-4">
                 Êtes-vous sûr de vouloir supprimer <strong>{guestToDelete?.name}</strong> ?
