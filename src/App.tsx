@@ -26,7 +26,7 @@ const App = () => (
           <Route path="/guests" element={<Guests />} />
           <Route path="/scanner" element={<Scanner />} />
           <Route path="/tables" element={<Tables />} />
-          <Route path="/invite/:qrCode" element={<Invite />} />
+          
           <Route path="/scan-result/:qrCode" element={<ScanResult />} />
           <Route path="/invitation/:code" element={<Invitation />} />
           <Route path="/scan-direct/:data" element={<ScanDirect />} />
