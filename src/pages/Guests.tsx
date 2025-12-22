@@ -193,6 +193,7 @@ const Guests = () => {
                   <Link to="/"><ArrowLeft className="h-4 w-4"/></Link>
                 </Button>
                 <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1>
+               <h1 className="text-2xl font-bold text-slate-900 font-serif">LA TABLE 38 CORRESPOND A LA TABLE 9 </h1>
             </div>
             <p className="text-sm text-slate-500 ml-10">
                 {guests.length} invités enregistrés sur 370 places disponibles
@@ -255,6 +256,7 @@ const Guests = () => {
               className={`border-none shadow-sm hover:shadow-md transition-all ${
                 selectedGuestIds.includes(guest.id) ? 'ring-2 ring-primary bg-primary/5' : ''
               }`}
+              
             >
               <CardContent className="p-5">
                 {isSelectionMode && (
