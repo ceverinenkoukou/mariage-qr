@@ -376,6 +376,7 @@ const Guests = () => {
             </Button>
           </div>
         )
+        }
 
         {/* DIALOG FORMULAIRE */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
