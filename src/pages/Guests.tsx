@@ -29,49 +29,51 @@ const Guests = () => {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   
-  // Debugging: log qrGuest changes
-  useEffect(() => {
-    if (qrGuest) {
-      console.log("QR Guest data:", qrGuest);
-    }
-  }, [qrGuest]);
-  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // 1. Récupération des invités et des tables (créées manuellement)
+  // 1. Récupération des invités et des tables
   const { data: guests = [] } = useQuery({ queryKey: ["guests"], queryFn: getAllGuests });
   const { data: tables = [] } = useQuery({ queryKey: ["tables"], queryFn: tableweddingService.getAllTables });
 
-  // 2. Logique de calcul du remplissage
+  // 2. Fonctions utilitaires
   const getTableOccupancy = (tableId: string) => {
     return guests.filter(guest => guest.table === tableId).length;
   };
   
   const getTableName = (tableId: any) => {
-  const table = tables.find((t: any) => String(t.id) === String(tableId));
-  return table ? table.name : "N/A";
-};
+    if (!tableId) return "N/A";
+    const table = tables.find((t: any) => String(t.id) === String(tableId));
+    return table ? table.name : "N/A";
+  };
   
   const getTableCategory = (tableId: string | null) => {
     if (!tableId) return null;
     const table = tables.find(t => t.id === tableId);
     return table ? table.category : null;
-  }
+  };
 
-  // Filtrer les invités en fonction de la recherche
+  // 3. Filtrage des invités avec recherche (CORRIGÉ)
   const filteredGuests = useMemo(() => {
     if (!searchQuery.trim()) return guests;
     
     const query = searchQuery.toLowerCase().trim();
-    return guests.filter(guest => 
-      guest.name.toLowerCase().includes(query) ||
-      getTableName(guest.table)?.toLowerCase().includes(query) ||
-      getTableCategory(guest.table)?.toLowerCase().includes(query)
-    );
-  }, [guests, searchQuery, tables]);
+    
+    return guests.filter(guest => {
+      // Récupérer les valeurs de manière sûre
+      const tableName = getTableName(guest.table);
+      const tableCategory = getTableCategory(guest.table);
+      
+      // Vérifier chaque critère de recherche
+      const matchesName = guest.name.toLowerCase().includes(query);
+      const matchesTable = tableName && tableName !== "N/A" && tableName.toLowerCase().includes(query);
+      const matchesCategory = tableCategory && tableCategory.toLowerCase().includes(query);
+      
+      return matchesName || matchesTable || matchesCategory;
+    });
+  }, [guests, searchQuery, tables]); // ✅ IMPORTANT : 'tables' dans les dépendances
 
-  // Mutation pour créer/modifier un invité
+  // 4. Mutations
   const mutation = useMutation({
     mutationFn: (data: any) => selectedGuest ? updateGuest(selectedGuest.id, data) : createGuest(data),
     onSuccess: () => {
@@ -82,7 +84,6 @@ const Guests = () => {
     },
   });
 
-  // Mutation pour supprimer un invité
   const deleteMutation = useMutation({
     mutationFn: (guestId: string) => deleteGuest(guestId),
     onSuccess: () => {
@@ -104,10 +105,8 @@ const Guests = () => {
     }
   });
 
-  // Mutation pour suppression en masse
   const bulkDeleteMutation = useMutation({
     mutationFn: async (guestIds: string[]) => {
-      // Supprimer tous les invités sélectionnés en parallèle
       await Promise.all(guestIds.map(id => deleteGuest(id)));
     },
     onSuccess: () => {
@@ -130,12 +129,12 @@ const Guests = () => {
     }
   });
 
+  // 5. Handlers
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const tableId = formData.get("table") as string;
     
-    // Vérification de sécurité : pas plus de 10 personnes
     const count = getTableOccupancy(tableId);
     const isFull = count >= 10;
     if (!selectedGuest && isFull) {
@@ -156,7 +155,6 @@ const Guests = () => {
     });
   };
 
-  // Gestion de la sélection
   const handleSelectGuest = (guestId: string) => {
     setSelectedGuestIds(prev => 
       prev.includes(guestId) 
@@ -198,7 +196,7 @@ const Guests = () => {
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* EN-TÊTE AVEC RÉCAPITULATIF */}
+        {/* EN-TÊTE */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -261,7 +259,7 @@ const Guests = () => {
           </div>
         </div>
 
-        {/* Barre de recherche */}
+        {/* BARRE DE RECHERCHE */}
         <div className="max-w-md mx-auto w-full">
           <div className="relative">
             <Input
@@ -287,82 +285,7 @@ const Guests = () => {
           </div>
         </div>
 
-        {/* LISTE DES INVITÉS SOUS FORME DE GRILLE */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredGuests.map((guest) => (
-            <Card 
-              key={guest.id} 
-              className={`border-none shadow-sm hover:shadow-md transition-all ${
-                selectedGuestIds.includes(guest.id) ? 'ring-2 ring-primary bg-primary/5' : ''
-              }`}
-              
-            >
-              <CardContent className="p-5">
-                {isSelectionMode && (
-                  <div className="flex items-center mb-3">
-                    <Checkbox 
-                      checked={selectedGuestIds.includes(guest.id)}
-                      onCheckedChange={() => handleSelectGuest(guest.id)}
-                      id={`select-${guest.id}`}
-                    />
-                    <label 
-                      htmlFor={`select-${guest.id}`} 
-                      className="ml-2 text-sm text-slate-600 cursor-pointer"
-                    >
-                      Sélectionner
-                    </label>
-                  </div>
-                )}
-                
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-slate-800">{guest.name}</h3>
-                    <div className="flex gap-2">
-                        <Badge variant="secondary" className="text-[10px] uppercase">
-                          {getTableName(guest.table) || "Pas de table"}
-                        </Badge>
-                        <Badge className="bg-slate-100 text-slate-600 border-none text-[10px] uppercase">
-                          {getTableCategory(guest.table) || guest.status}
-                        </Badge>
-                    </div>
-                  </div>
-                  {guest.scanned && <Badge className="bg-emerald-500">Présent</Badge>}
-                </div>
-                
-                {!isSelectionMode && (
-                  <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-50">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1" 
-                      onClick={() => { setQrGuest(guest); setShowQRDialog(true); }}
-                    >
-                      <QrCode className="h-4 w-4 mr-2" /> QR
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1" 
-                      onClick={() => { setSelectedGuest(guest); setIsDialogOpen(true); }}
-                    >
-                      <Edit className="h-4 w-4 mr-2" /> Éditer
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleDeleteSingle(guest)}
-                      className="border-red-200 text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Message quand aucun résultat */}
+        {/* MESSAGE AUCUN RÉSULTAT */}
         {searchQuery && filteredGuests.length === 0 && (
           <div className="text-center py-12">
             <p className="text-gray-500">Aucun invité trouvé pour "<span className="font-semibold">{searchQuery}</span>"</p>
@@ -374,10 +297,85 @@ const Guests = () => {
               Réinitialiser la recherche
             </Button>
           </div>
-        )
-        }
+        )}
 
-        {/* DIALOG FORMULAIRE d'INVITÉ  */}
+        {/* LISTE DES INVITÉS */}
+        {filteredGuests.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredGuests.map((guest) => (
+              <Card 
+                key={guest.id} 
+                className={`border-none shadow-sm hover:shadow-md transition-all ${
+                  selectedGuestIds.includes(guest.id) ? 'ring-2 ring-primary bg-primary/5' : ''
+                }`}
+              >
+                <CardContent className="p-5">
+                  {isSelectionMode && (
+                    <div className="flex items-center mb-3">
+                      <Checkbox 
+                        checked={selectedGuestIds.includes(guest.id)}
+                        onCheckedChange={() => handleSelectGuest(guest.id)}
+                        id={`select-${guest.id}`}
+                      />
+                      <label 
+                        htmlFor={`select-${guest.id}`} 
+                        className="ml-2 text-sm text-slate-600 cursor-pointer"
+                      >
+                        Sélectionner
+                      </label>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <h3 className="font-bold text-slate-800">{guest.name}</h3>
+                      <div className="flex gap-2">
+                          <Badge variant="secondary" className="text-[10px] uppercase">
+                            {getTableName(guest.table)}
+                          </Badge>
+                          <Badge className="bg-slate-100 text-slate-600 border-none text-[10px] uppercase">
+                            {getTableCategory(guest.table) || guest.status}
+                          </Badge>
+                      </div>
+                    </div>
+                    {guest.scanned && <Badge className="bg-emerald-500">Présent</Badge>}
+                  </div>
+                  
+                  {!isSelectionMode && (
+                    <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-50">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1" 
+                        onClick={() => { setQrGuest(guest); setShowQRDialog(true); }}
+                      >
+                        <QrCode className="h-4 w-4 mr-2" /> QR
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1" 
+                        onClick={() => { setSelectedGuest(guest); setIsDialogOpen(true); }}
+                      >
+                        <Edit className="h-4 w-4 mr-2" /> Éditer
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleDeleteSingle(guest)}
+                        className="border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* DIALOG FORMULAIRE */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -438,7 +436,7 @@ const Guests = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Texte personnalisé </Label>
+                <Label>Texte personnalisé</Label>
                 <Textarea name="wedding_text" defaultValue={selectedGuest?.wedding_text} placeholder="Un message spécial pour cet invité..." className="h-20" />
               </div>
 
@@ -459,17 +457,11 @@ const Guests = () => {
             </DialogHeader>
             {qrGuest && (
               <QRCodeDisplay 
-                    value={`${window.location.origin}/invitation/${qrGuest.qr_code}`} 
-                    guestName={qrGuest.name}
-                    tableName={getTableName(qrGuest.table) || ""}
-                                        
-                  />
+                value={`${window.location.origin}/invitation/${qrGuest.qr_code}`} 
+                guestName={qrGuest.name}
+                tableName={getTableName(qrGuest.table)}
+              />
             )}
-            {/* {qrGuest && (
-              <div className="text-center mt-4">
-                <p className="text-sm text-slate-400">Scan ce QR code pour rejoindre l'invité</p>
-              </div>
-            )} */}
           </DialogContent>
         </Dialog>
 
@@ -479,7 +471,7 @@ const Guests = () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
                 <AlertTriangle className="h-5 w-5" />
-                Confirmer la suppression d'un invité
+                Confirmer la suppression
               </DialogTitle>
               <DialogDescription className="pt-4">
                 Êtes-vous sûr de vouloir supprimer <strong>{guestToDelete?.name}</strong> ?
