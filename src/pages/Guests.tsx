@@ -203,7 +203,9 @@ const Guests = () => {
                 <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                   <Link to="/"><ArrowLeft className="h-4 w-4"/></Link>
                 </Button>
-                <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1>
+                <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1><br/>
+                <h3 className="text-2xl font-bold text-slate-900 font-serif">LA TABLE 38 EST LA TABLE 9</h3><br/>
+
             </div>
             <p className="text-sm text-slate-500 ml-10">
                 {filteredGuests.length} invité{filteredGuests.length > 1 ? 's' : ''} affiché{filteredGuests.length > 1 ? 's' : ''} sur {guests.length} au total
