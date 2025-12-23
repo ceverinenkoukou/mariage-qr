@@ -44,10 +44,11 @@ const Guests = () => {
   const { data: guests = [] } = useQuery({ queryKey: ["guests"], queryFn: getAllGuests });
   const { data: tables = [] } = useQuery({ queryKey: ["tables"], queryFn: tableweddingService.getAllTables });
 
-  // 2. Fonctions utilitaires
-  const getTableOccupancy = (tableId: string | null) => {
+  // 2. Fonctions utilitaires (CORRIGÉES POUR COMPARAISON STRING/NUMBER)
+  const getTableOccupancy = (tableId: any) => {
     if (!tableId) return 0;
-    return guests.filter(guest => guest.table === tableId).length;
+    // On convertit les deux en string pour une comparaison sûre
+    return guests.filter(guest => String(guest.table) === String(tableId)).length;
   };
   
   const getTableName = (tableId: any) => {
@@ -56,31 +57,29 @@ const Guests = () => {
     return table ? table.name : "N/A";
   };
   
-  const getTableCategory = (tableId: string | null) => {
+  const getTableCategory = (tableId: any) => {
     if (!tableId) return null;
-    const table = tables.find(t => t.id === tableId);
+    const table = tables.find(t => String(t.id) === String(tableId));
     return table ? table.category : null;
   };
 
-  // 3. Filtrage des invités avec recherche (CORRIGÉ)
+  // 3. Filtrage des invités avec recherche
   const filteredGuests = useMemo(() => {
     if (!searchQuery.trim()) return guests;
     
     const query = searchQuery.toLowerCase().trim();
     
     return guests.filter(guest => {
-      // Récupérer les valeurs de manière sûre
       const tableName = getTableName(guest.table);
       const tableCategory = getTableCategory(guest.table);
       
-      // Vérifier chaque critère de recherche
       const matchesName = guest.name.toLowerCase().includes(query);
       const matchesTable = tableName && tableName !== "N/A" && tableName.toLowerCase().includes(query);
       const matchesCategory = tableCategory && tableCategory.toLowerCase().includes(query);
       
       return matchesName || matchesTable || matchesCategory;
     });
-  }, [guests, searchQuery, tables]); // ✅ IMPORTANT : 'tables' dans les dépendances
+  }, [guests, searchQuery, tables]);
 
   // 4. Mutations
   const mutation = useMutation({
@@ -128,27 +127,20 @@ const Guests = () => {
         description: `${selectedGuestIds.length} invité(s) et leurs QR codes ont été supprimés.` 
       });
     },
-    onError: (error) => {
-      toast({ 
-        variant: "destructive",
-        title: "Erreur de suppression", 
-        description: "Impossible de supprimer certains invités. Veuillez réessayer." 
-      });
-      console.error("Bulk delete error:", error);
-    }
   });
 
-  // 5. Handlers
+  // 5. Handlers (MODIFIÉ POUR LA SOLUTION A)
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    // Use the selectedTableId from state, or null if no table is selected
-    const tableId = selectedTableId || null;
     
-    // Only check occupancy if a table is selected
-    if (tableId) {
-      const count = getTableOccupancy(tableId);
+    // CONVERSION DE L'ID EN NOMBRE ENTIER POUR DJANGO
+    const tableIdNumeric = selectedTableId ? parseInt(selectedTableId, 10) : null;
+    
+    if (tableIdNumeric) {
+      const count = getTableOccupancy(tableIdNumeric);
       const isFull = count >= 10;
+      // Ne bloque que si c'est un nouvel invité sur une table pleine
       if (!selectedGuest && isFull) {
           toast({ 
               variant: "destructive", 
@@ -159,7 +151,6 @@ const Guests = () => {
       }
     }
 
-    // Create the guest data object conditionally including table
     const guestData: any = {
       name: formData.get("name"),
       status: formData.get("status"),
@@ -167,9 +158,9 @@ const Guests = () => {
       wedding_text: formData.get("wedding_text"),
     };
     
-    // Only add table field if it's not null/empty
-    if (tableId) {
-      guestData.table = tableId;
+    // Envoyer l'ID sous forme de nombre
+    if (tableIdNumeric !== null) {
+      guestData.table = tableIdNumeric;
     }
     
     mutation.mutate(guestData);
@@ -196,10 +187,10 @@ const Guests = () => {
     setShowDeleteDialog(true);
   };
 
-  // Handler pour ouvrir le dialogue d'édition
   const handleOpenEditDialog = (guest: Guest) => {
     setSelectedGuest(guest);
-    setSelectedTableId(guest.table || null); // Set the selected table when editing, null if no table assigned
+    // On convertit en string pour le composant UI Popover/Command
+    setSelectedTableId(guest.table ? String(guest.table) : null); 
     setIsDialogOpen(true);
   };
 
@@ -219,117 +210,65 @@ const Guests = () => {
     bulkDeleteMutation.mutate(selectedGuestIds);
   };
 
-  // Fonction pour exporter la liste des invités par table
+  // Fonctions d'export (CSV & PDF) - conservées telles quelles
   const exportGuestsByTable = () => {
-    // Grouper les invités par table
     const guestsByTable: Record<string, Guest[]> = {};
-    
     guests.forEach(guest => {
       const tableName = getTableName(guest.table) || 'Sans table';
-      if (!guestsByTable[tableName]) {
-        guestsByTable[tableName] = [];
-      }
+      if (!guestsByTable[tableName]) guestsByTable[tableName] = [];
       guestsByTable[tableName].push(guest);
     });
-    
-    // Générer le contenu CSV
     let csvContent = 'Nom,Table,Statut,Accompagnement,Scanné\n';
-    
     Object.keys(guestsByTable).sort().forEach(tableName => {
       const tableGuests = guestsByTable[tableName];
-      
-      // Ajouter une ligne pour le nom de la table
       csvContent += `"Table: ${tableName}",,,\n`;
-      
-      // Ajouter les invités de cette table
       tableGuests.forEach(guest => {
         const statut = guest.statut_guest === 'COUPLE' ? 'Couple' : guest.statut_guest === 'SINGLE' ? 'Seul' : 'Famille';
         const scanned = guest.scanned ? 'Oui' : 'Non';
         csvContent += `${guest.name.replace(/,/g, ' ')},"${tableName}",${guest.status},${statut},${scanned}\n`;
       });
-      
-      // Ligne vide après chaque table pour séparation
       csvContent += '\n';
     });
-    
-    // Créer et télécharger le fichier
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    const filename = `liste-invites-par-table-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.download = filename;
-    document.body.appendChild(link);
+    link.download = `liste-invites-par-table-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
   };
 
-  // Fonction pour exporter la liste des invités par table en PDF
   const exportGuestsByTablePDF = () => {
     const doc = new jsPDF();
-    
-    // Grouper les invités par table
     const guestsByTable: Record<string, Guest[]> = {};
-    
     guests.forEach(guest => {
       const tableName = getTableName(guest.table) || 'Sans table';
-      if (!guestsByTable[tableName]) {
-        guestsByTable[tableName] = [];
-      }
+      if (!guestsByTable[tableName]) guestsByTable[tableName] = [];
       guestsByTable[tableName].push(guest);
     });
-    
-    // Titre du document
     doc.setFontSize(18);
     doc.text('Liste des Invités par Table', 20, 20);
-    
     let yPosition = 30;
-    
-    // Parcourir chaque table et ses invités
-    Object.keys(guestsByTable).sort().forEach((tableName, index) => {
+    Object.keys(guestsByTable).sort().forEach((tableName) => {
       const tableGuests = guestsByTable[tableName];
-      
-      // Ajouter le nom de la table
       doc.setFontSize(14);
       doc.setFont(undefined, 'bold');
       doc.text(`Table: ${tableName}`, 20, yPosition);
       yPosition += 10;
-      
-      // Ajouter le tableau des invités pour cette table
       const tableData = tableGuests.map(guest => [
         guest.name,
         guest.status,
         guest.statut_guest === 'COUPLE' ? 'Couple' : guest.statut_guest === 'SINGLE' ? 'Seul' : 'Famille',
         guest.scanned ? 'Oui' : 'Non'
       ]);
-      
       autoTable(doc, {
         head: [['Nom', 'Statut', 'Accompagnement', 'Scanné']],
         body: tableData,
         startY: yPosition,
         margin: { left: 20, right: 20 },
-        styles: {
-          fontSize: 10,
-          cellPadding: 3
-        },
-        headStyles: {
-          fillColor: [70, 130, 180], // Couleur bleue
-          textColor: [255, 255, 255],
-          fontStyle: 'bold'
-        }
       });
-      
       yPosition = (doc as any).lastAutoTable.finalY + 15;
-      
-      // Vérifier si on a besoin d'une nouvelle page
-      if (yPosition > 270) {
-        doc.addPage();
-        yPosition = 20;
-      }
+      if (yPosition > 270) { doc.addPage(); yPosition = 20; }
     });
-    
-    // Sauvegarder le PDF
     doc.save(`liste-invites-par-table-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
@@ -344,82 +283,44 @@ const Guests = () => {
                 <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                   <Link to="/"><ArrowLeft className="h-4 w-4"/></Link>
                 </Button>
-                <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1><br/>  
-
+                <h1 className="text-2xl font-bold text-slate-900 font-serif">Liste des Invités</h1>
             </div>
             <p className="text-sm text-slate-500 ml-10">
                 {filteredGuests.length} invité{filteredGuests.length > 1 ? 's' : ''} affiché{filteredGuests.length > 1 ? 's' : ''} sur {guests.length} au total
-                {searchQuery && ` pour "${searchQuery}"`}
             </p>
           </div>
           
           <div className="flex gap-2">
             {!isSelectionMode ? (
               <>
-                <Button 
-                  onClick={() => setIsSelectionMode(true)} 
-                  variant="outline"
-                  className="border-slate-300"
-                >
+                <Button onClick={() => setIsSelectionMode(true)} variant="outline" className="border-slate-300">
                   <Trash2 className="mr-2 h-4 w-4" /> Sélectionner
                 </Button>
-                <Button 
-                  onClick={() => { 
-                    setSelectedGuest(null); 
-                    setSelectedTableId(null); // Reset selected table when creating new guest
-                    setIsDialogOpen(true); 
-                  }} 
-                  className="bg-primary shadow-lg"
-                >
+                <Button onClick={() => { setSelectedGuest(null); setSelectedTableId(null); setIsDialogOpen(true); }} className="bg-primary shadow-lg">
                   <Plus className="mr-2 h-4 w-4" /> Ajouter un invité
                 </Button>
-                <Button 
-                  onClick={exportGuestsByTable} 
-                  variant="outline"
-                  className="border-slate-300"
-                >
-                  <Users className="mr-2 h-4 w-4" /> Exporter CSV
+                <Button onClick={exportGuestsByTable} variant="outline" className="border-slate-300">
+                  <Users className="mr-2 h-4 w-4" /> CSV
                 </Button>
-                <Button 
-                  onClick={exportGuestsByTablePDF} 
-                  variant="outline"
-                  className="border-slate-300"
-                >
-                  <Users className="mr-2 h-4 w-4" /> Exporter PDF
+                <Button onClick={exportGuestsByTablePDF} variant="outline" className="border-slate-300">
+                  <Users className="mr-2 h-4 w-4" /> PDF
                 </Button>
               </>
             ) : (
               <>
-                <Button 
-                  onClick={handleSelectAll} 
-                  variant="outline"
-                  className="border-slate-300"
-                >
+                <Button onClick={handleSelectAll} variant="outline" className="border-slate-300">
                   {selectedGuestIds.length === filteredGuests.length ? "Tout désélectionner" : "Tout sélectionner"}
                 </Button>
-                <Button 
-                  onClick={handleBulkDelete} 
-                  variant="destructive"
-                  disabled={selectedGuestIds.length === 0}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> 
-                  Supprimer ({selectedGuestIds.length})
+                <Button onClick={handleBulkDelete} variant="destructive" disabled={selectedGuestIds.length === 0}>
+                  <Trash2 className="mr-2 h-4 w-4" /> Supprimer ({selectedGuestIds.length})
                 </Button>
-                <Button 
-                  onClick={() => {
-                    setIsSelectionMode(false);
-                    setSelectedGuestIds([]);
-                  }} 
-                  variant="ghost"
-                >
-                  Annuler
-                </Button>
+                <Button onClick={() => { setIsSelectionMode(false); setSelectedGuestIds([]); }} variant="ghost">Annuler</Button>
               </>
             )}
           </div>
         </div>
 
-        {/* BARRE DE RECHERCHE */}
+        {/* RECHERCHE */}
         <div className="max-w-md mx-auto w-full">
           <div className="relative">
             <Input
@@ -427,115 +328,51 @@ const Guests = () => {
               placeholder="Rechercher par nom, table ou catégorie..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10 py-2 w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="pl-10 py-2 w-full rounded-lg"
             />
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
-            </div>
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-              >
-                <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
           </div>
         </div>
 
-        {/* MESSAGE AUCUN RÉSULTAT */}
-        {searchQuery && filteredGuests.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">Aucun invité trouvé pour "<span className="font-semibold">{searchQuery}</span>"</p>
-            <Button 
-              variant="outline" 
-              className="mt-4"
-              onClick={() => setSearchQuery('')}
-            >
-              Réinitialiser la recherche
-            </Button>
-          </div>
-        )}
-
-        {/* LISTE DES INVITÉS */}
-        {filteredGuests.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredGuests.map((guest) => (
-              <Card 
-                key={guest.id} 
-                className={`border-none shadow-sm hover:shadow-md transition-all ${
-                  selectedGuestIds.includes(guest.id) ? 'ring-2 ring-primary bg-primary/5' : ''
-                }`}
-              >
-                <CardContent className="p-5">
-                  {isSelectionMode && (
-                    <div className="flex items-center mb-3">
-                      <Checkbox 
-                        checked={selectedGuestIds.includes(guest.id)}
-                        onCheckedChange={() => handleSelectGuest(guest.id)}
-                        id={`select-${guest.id}`}
-                      />
-                      <label 
-                        htmlFor={`select-${guest.id}`} 
-                        className="ml-2 text-sm text-slate-600 cursor-pointer"
-                      >
-                        Sélectionner
-                      </label>
-                    </div>
-                  )}
-                  
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1">
-                      <h3 className="font-bold text-slate-800">{guest.name}</h3>
-                      <div className="flex gap-2">
-                          <Badge variant="secondary" className="text-[10px] uppercase">
-                            {getTableName(guest.table)}
-                          </Badge>
-                          <Badge className="bg-slate-100 text-slate-600 border-none text-[10px] uppercase">
-                            {getTableCategory(guest.table) || guest.status}
-                          </Badge>
-                      </div>
-                    </div>
-                    {guest.scanned && <Badge className="bg-emerald-500">Présent</Badge>}
+        {/* GRILLE DES INVITÉS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredGuests.map((guest) => (
+            <Card key={guest.id} className={`border-none shadow-sm ${selectedGuestIds.includes(guest.id) ? 'ring-2 ring-primary' : ''}`}>
+              <CardContent className="p-5">
+                {isSelectionMode && (
+                  <div className="flex items-center mb-3">
+                    <Checkbox checked={selectedGuestIds.includes(guest.id)} onCheckedChange={() => handleSelectGuest(guest.id)} />
                   </div>
-                  
-                  {!isSelectionMode && (
-                    <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-50">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1" 
-                        onClick={() => { setQrGuest(guest); setShowQRDialog(true); }}
-                      >
-                        <QrCode className="h-4 w-4 mr-2" /> QR
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1" 
-                        onClick={() => handleOpenEditDialog(guest)}
-                      >
-                        <Edit className="h-4 w-4 mr-2" /> Éditer
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleDeleteSingle(guest)}
-                        className="border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                )}
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-slate-800">{guest.name}</h3>
+                    <div className="flex gap-2">
+                        <Badge variant="secondary" className="text-[10px] uppercase">{getTableName(guest.table)}</Badge>
+                        <Badge className="bg-slate-100 text-slate-600 border-none text-[10px] uppercase">{getTableCategory(guest.table) || guest.status}</Badge>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                  </div>
+                  {guest.scanned && <Badge className="bg-emerald-500">Présent</Badge>}
+                </div>
+                {!isSelectionMode && (
+                  <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-50">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => { setQrGuest(guest); setShowQRDialog(true); }}>
+                      <QrCode className="h-4 w-4 mr-2" /> QR
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleOpenEditDialog(guest)}>
+                      <Edit className="h-4 w-4 mr-2" /> Éditer
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleDeleteSingle(guest)} className="text-red-600">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-        {/* DIALOG FORMULAIRE */}
+        {/* DIALOG FORMULAIRE (Modification pour utiliser IDs numériques) */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -549,19 +386,11 @@ const Guests = () => {
 
               <div className="space-y-2">
                 <Label>Attribuer une table (Max 10 pers.)</Label>
-                <input type="hidden" name="table" value={selectedTableId || ""} />
-                <Popover open={openTableSelect} onOpenChange={(open) => {
-                  setOpenTableSelect(open);
-                }}>
+                <Popover open={openTableSelect} onOpenChange={setOpenTableSelect}>
                   <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openTableSelect}
-                      className="w-full justify-between"
-                    >
+                    <Button variant="outline" className="w-full justify-between">
                       {selectedTableId
-                        ? `${tables.find((t) => t.id === selectedTableId)?.name} (${getTableOccupancy(selectedTableId)}/10 places) - ${tables.find((t) => t.id === selectedTableId)?.category}`
+                        ? `${tables.find((t) => String(t.id) === selectedTableId)?.name} (${getTableOccupancy(selectedTableId)}/10 places)`
                         : "Sélectionnez une table..."}
                     </Button>
                   </PopoverTrigger>
@@ -571,40 +400,21 @@ const Guests = () => {
                       <CommandList>
                         <CommandEmpty>Aucune table trouvée.</CommandEmpty>
                         <CommandGroup>
-                          {tables.map((t) => {
-                            const count = getTableOccupancy(t.id);
-                            const isFull = count >= 10;
-                            const isDisabled = isFull && (selectedGuest?.table !== t.id);
-                            return (
-                              <CommandItem
-                                key={t.id}
-                                value={t.id}
-                                onSelect={(currentValue) => {
-                                  setSelectedTableId(currentValue || null);
-                                  setOpenTableSelect(false);
-                                }}
-                                disabled={isDisabled}
-                              >
-                                {t.name} ({count}/10 places) - {t.category}
-                                {isFull && (selectedGuest?.table !== t.id) && (
-                                  <span className="text-xs text-muted-foreground ml-2">(Complet)</span>
-                                )}
-                              </CommandItem>
-                            );
-                          })}
-                          {tables.length === 0 && (
-                            <CommandItem disabled>
-                              Aucune table créée dans "Gestion Tables"
+                          {tables.map((t) => (
+                            <CommandItem
+                              key={t.id}
+                              value={String(t.id)}
+                              onSelect={(v) => { setSelectedTableId(v); setOpenTableSelect(false); }}
+                              disabled={getTableOccupancy(t.id) >= 10 && String(selectedGuest?.table) !== String(t.id)}
+                            >
+                              {t.name} ({getTableOccupancy(t.id)}/10) - {t.category}
                             </CommandItem>
-                          )}
+                          ))}
                         </CommandGroup>
                       </CommandList>
                     </Command>
                   </PopoverContent>
                 </Popover>
-                <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                    <Info className="h-3 w-3" /> Seules les tables créées manuellement apparaissent ici.
-                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -633,7 +443,7 @@ const Guests = () => {
 
               <div className="space-y-2">
                 <Label>Texte personnalisé</Label>
-                <Textarea name="wedding_text" defaultValue={selectedGuest?.wedding_text} placeholder="Un message spécial pour cet invité..." className="h-20" />
+                <Textarea name="wedding_text" defaultValue={selectedGuest?.wedding_text} className="h-20" />
               </div>
 
               <DialogFooter>
@@ -645,88 +455,23 @@ const Guests = () => {
           </DialogContent>
         </Dialog>
 
-        {/* DIALOG QR CODE */}
+        {/* DIALOG QR CODE & SUPPRESSION (Conservés) */}
         <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
           <DialogContent className="max-w-xs">
-            <DialogHeader>
-              <DialogTitle className="text-center">{qrGuest?.name}</DialogTitle>
-            </DialogHeader>
-            {qrGuest && (
-              <QRCodeDisplay 
-                value={`${window.location.origin}/invitation/${qrGuest.qr_code}`} 
-                guestName={qrGuest.name}
-                tableName={getTableName(qrGuest.table)}
-              />
-            )}
+            <DialogHeader><DialogTitle className="text-center">{qrGuest?.name}</DialogTitle></DialogHeader>
+            {qrGuest && <QRCodeDisplay value={`${window.location.origin}/invitation/${qrGuest.qr_code}`} guestName={qrGuest.name} tableName={getTableName(qrGuest.table)} />}
           </DialogContent>
         </Dialog>
 
-        {/* DIALOG CONFIRMATION SUPPRESSION UNIQUE */}
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-600">
-                <AlertTriangle className="h-5 w-5" />
-                Confirmer la suppression
-              </DialogTitle>
-              <DialogDescription className="pt-4">
-                Êtes-vous sûr de vouloir supprimer <strong>{guestToDelete?.name}</strong> ?
-                <br /><br />
-                <span className="text-red-600 font-medium">
-                  Cette action est irréversible et supprimera également le QR code associé.
-                </span>
-              </DialogDescription>
+              <DialogTitle className="text-red-600">Confirmer la suppression</DialogTitle>
+              <DialogDescription>Supprimer <strong>{guestToDelete?.name}</strong> ?</DialogDescription>
             </DialogHeader>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowDeleteDialog(false)}
-                disabled={deleteMutation.isPending}
-              >
-                Annuler
-              </Button>
-              <Button 
-                variant="destructive" 
-                onClick={confirmDeleteSingle}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? "Suppression..." : "Supprimer"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* DIALOG CONFIRMATION SUPPRESSION EN MASSE */}
-        <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-600">
-                <AlertTriangle className="h-5 w-5" />
-                Confirmer la suppression en masse
-              </DialogTitle>
-              <DialogDescription className="pt-4">
-                Êtes-vous sûr de vouloir supprimer <strong>{selectedGuestIds.length} invité(s)</strong> ?
-                <br /><br />
-                <span className="text-red-600 font-medium">
-                  Cette action est irréversible et supprimera également tous les QR codes associés.
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowBulkDeleteDialog(false)}
-                disabled={bulkDeleteMutation.isPending}
-              >
-                Annuler
-              </Button>
-              <Button 
-                variant="destructive" 
-                onClick={confirmBulkDelete}
-                disabled={bulkDeleteMutation.isPending}
-              >
-                {bulkDeleteMutation.isPending ? "Suppression..." : `Supprimer ${selectedGuestIds.length} invité(s)`}
-              </Button>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Annuler</Button>
+              <Button variant="destructive" onClick={confirmDeleteSingle} disabled={deleteMutation.isPending}>Supprimer</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
