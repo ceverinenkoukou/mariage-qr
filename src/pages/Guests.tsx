@@ -35,7 +35,7 @@ const Guests = () => {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [openTableSelect, setOpenTableSelect] = useState(false);
-  const [selectedTableId, setSelectedTableId] = useState<string>("");
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -45,7 +45,8 @@ const Guests = () => {
   const { data: tables = [] } = useQuery({ queryKey: ["tables"], queryFn: tableweddingService.getAllTables });
 
   // 2. Fonctions utilitaires
-  const getTableOccupancy = (tableId: string) => {
+  const getTableOccupancy = (tableId: string | null) => {
+    if (!tableId) return 0;
     return guests.filter(guest => guest.table === tableId).length;
   };
   
@@ -141,26 +142,37 @@ const Guests = () => {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const tableId = selectedTableId; // Use the selectedTableId from state
+    // Use the selectedTableId from state, or null if no table is selected
+    const tableId = selectedTableId || null;
     
-    const count = getTableOccupancy(tableId);
-    const isFull = count >= 10;
-    if (!selectedGuest && isFull) {
-        toast({ 
-            variant: "destructive", 
-            title: "Table saturée", 
-            description: "Cette table a déjà atteint sa limite de 10 personnes." 
-        });
-        return;
+    // Only check occupancy if a table is selected
+    if (tableId) {
+      const count = getTableOccupancy(tableId);
+      const isFull = count >= 10;
+      if (!selectedGuest && isFull) {
+          toast({ 
+              variant: "destructive", 
+              title: "Table saturée", 
+              description: "Cette table a déjà atteint sa limite de 10 personnes." 
+          });
+          return;
+      }
     }
 
-    mutation.mutate({
+    // Create the guest data object conditionally including table
+    const guestData: any = {
       name: formData.get("name"),
-      table: tableId,
       status: formData.get("status"),
       statut_guest: formData.get("statut_guest"),
       wedding_text: formData.get("wedding_text"),
-    });
+    };
+    
+    // Only add table field if it's not null/empty
+    if (tableId) {
+      guestData.table = tableId;
+    }
+    
+    mutation.mutate(guestData);
   };
 
   const handleSelectGuest = (guestId: string) => {
@@ -187,7 +199,7 @@ const Guests = () => {
   // Handler pour ouvrir le dialogue d'édition
   const handleOpenEditDialog = (guest: Guest) => {
     setSelectedGuest(guest);
-    setSelectedTableId(guest.table || ""); // Set the selected table when editing
+    setSelectedTableId(guest.table || null); // Set the selected table when editing, null if no table assigned
     setIsDialogOpen(true);
   };
 
@@ -354,7 +366,7 @@ const Guests = () => {
                 <Button 
                   onClick={() => { 
                     setSelectedGuest(null); 
-                    setSelectedTableId(""); // Reset selected table when creating new guest
+                    setSelectedTableId(null); // Reset selected table when creating new guest
                     setIsDialogOpen(true); 
                   }} 
                   className="bg-primary shadow-lg"
@@ -537,8 +549,10 @@ const Guests = () => {
 
               <div className="space-y-2">
                 <Label>Attribuer une table (Max 10 pers.)</Label>
-                <input type="hidden" name="table" value={selectedTableId} />
-                <Popover open={openTableSelect} onOpenChange={setOpenTableSelect}>
+                <input type="hidden" name="table" value={selectedTableId || ""} />
+                <Popover open={openTableSelect} onOpenChange={(open) => {
+                  setOpenTableSelect(open);
+                }}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -566,7 +580,7 @@ const Guests = () => {
                                 key={t.id}
                                 value={t.id}
                                 onSelect={(currentValue) => {
-                                  setSelectedTableId(currentValue);
+                                  setSelectedTableId(currentValue || null);
                                   setOpenTableSelect(false);
                                 }}
                                 disabled={isDisabled}
