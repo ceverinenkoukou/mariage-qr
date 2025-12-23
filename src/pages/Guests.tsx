@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Edit, QrCode, Users, Info, AlertTriangle, Search } from "lucide-react";
@@ -192,6 +193,52 @@ const Guests = () => {
     bulkDeleteMutation.mutate(selectedGuestIds);
   };
 
+  // Fonction pour exporter la liste des invités par table
+  const exportGuestsByTable = () => {
+    // Grouper les invités par table
+    const guestsByTable: Record<string, Guest[]> = {};
+    
+    guests.forEach(guest => {
+      const tableName = getTableName(guest.table) || 'Sans table';
+      if (!guestsByTable[tableName]) {
+        guestsByTable[tableName] = [];
+      }
+      guestsByTable[tableName].push(guest);
+    });
+    
+    // Générer le contenu CSV
+    let csvContent = 'Nom,Table,Statut,Accompagnement,Scanné\n';
+    
+    Object.keys(guestsByTable).sort().forEach(tableName => {
+      const tableGuests = guestsByTable[tableName];
+      
+      // Ajouter une ligne pour le nom de la table
+      csvContent += `"Table: ${tableName}",,,\n`;
+      
+      // Ajouter les invités de cette table
+      tableGuests.forEach(guest => {
+        const statut = guest.statut_guest === 'COUPLE' ? 'Couple' : guest.statut_guest === 'SINGLE' ? 'Seul' : 'Famille';
+        const scanned = guest.scanned ? 'Oui' : 'Non';
+        csvContent += `${guest.name.replace(/,/g, ' ')},"${tableName}",${guest.status},${statut},${scanned}\n`;
+      });
+      
+      // Ligne vide après chaque table pour séparation
+      csvContent += '\n';
+    });
+    
+    // Créer et télécharger le fichier
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const filename = `liste-invites-par-table-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -228,6 +275,13 @@ const Guests = () => {
                   className="bg-primary shadow-lg"
                 >
                   <Plus className="mr-2 h-4 w-4" /> Ajouter un invité
+                </Button>
+                <Button 
+                  onClick={exportGuestsByTable} 
+                  variant="outline"
+                  className="border-slate-300"
+                >
+                  <Users className="mr-2 h-4 w-4" /> Exporter
                 </Button>
               </>
             ) : (
