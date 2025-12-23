@@ -179,7 +179,7 @@ const ScanDirect = () => {
         </Card>
 
         <p className="text-center text-slate-400 text-[10px] mt-8 uppercase tracking-[0.2em]">
-          Mariage Gaëlle & Théophile • 2027
+          Mariage Gaëlle & Théophile • 2025
         </p>
       </div>
     </div>

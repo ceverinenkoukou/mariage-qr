@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
+import { saveAs } from 'file-saver';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -14,6 +17,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import QRCodeDisplay from "@/components/QRCodeDisplay";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getAllGuests, createGuest, updateGuest, deleteGuest } from "@/lib/services/guestService";
 import { tableweddingService } from "@/lib/services/tableService";
 import { Guest } from "@/types/guests";
@@ -29,6 +34,8 @@ const Guests = () => {
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [openTableSelect, setOpenTableSelect] = useState(false);
+  const [selectedTableId, setSelectedTableId] = useState<string>("");
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -134,7 +141,7 @@ const Guests = () => {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const tableId = formData.get("table") as string;
+    const tableId = selectedTableId; // Use the selectedTableId from state
     
     const count = getTableOccupancy(tableId);
     const isFull = count >= 10;
@@ -175,6 +182,13 @@ const Guests = () => {
   const handleDeleteSingle = (guest: Guest) => {
     setGuestToDelete(guest);
     setShowDeleteDialog(true);
+  };
+
+  // Handler pour ouvrir le dialogue d'édition
+  const handleOpenEditDialog = (guest: Guest) => {
+    setSelectedGuest(guest);
+    setSelectedTableId(guest.table || ""); // Set the selected table when editing
+    setIsDialogOpen(true);
   };
 
   const confirmDeleteSingle = () => {
@@ -239,6 +253,74 @@ const Guests = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  // Fonction pour exporter la liste des invités par table en PDF
+  const exportGuestsByTablePDF = () => {
+    const doc = new jsPDF();
+    
+    // Grouper les invités par table
+    const guestsByTable: Record<string, Guest[]> = {};
+    
+    guests.forEach(guest => {
+      const tableName = getTableName(guest.table) || 'Sans table';
+      if (!guestsByTable[tableName]) {
+        guestsByTable[tableName] = [];
+      }
+      guestsByTable[tableName].push(guest);
+    });
+    
+    // Titre du document
+    doc.setFontSize(18);
+    doc.text('Liste des Invités par Table', 20, 20);
+    
+    let yPosition = 30;
+    
+    // Parcourir chaque table et ses invités
+    Object.keys(guestsByTable).sort().forEach((tableName, index) => {
+      const tableGuests = guestsByTable[tableName];
+      
+      // Ajouter le nom de la table
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Table: ${tableName}`, 20, yPosition);
+      yPosition += 10;
+      
+      // Ajouter le tableau des invités pour cette table
+      const tableData = tableGuests.map(guest => [
+        guest.name,
+        guest.status,
+        guest.statut_guest === 'COUPLE' ? 'Couple' : guest.statut_guest === 'SINGLE' ? 'Seul' : 'Famille',
+        guest.scanned ? 'Oui' : 'Non'
+      ]);
+      
+      autoTable(doc, {
+        head: [['Nom', 'Statut', 'Accompagnement', 'Scanné']],
+        body: tableData,
+        startY: yPosition,
+        margin: { left: 20, right: 20 },
+        styles: {
+          fontSize: 10,
+          cellPadding: 3
+        },
+        headStyles: {
+          fillColor: [70, 130, 180], // Couleur bleue
+          textColor: [255, 255, 255],
+          fontStyle: 'bold'
+        }
+      });
+      
+      yPosition = (doc as any).lastAutoTable.finalY + 15;
+      
+      // Vérifier si on a besoin d'une nouvelle page
+      if (yPosition > 270) {
+        doc.addPage();
+        yPosition = 20;
+      }
+    });
+    
+    // Sauvegarder le PDF
+    doc.save(`liste-invites-par-table-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -271,7 +353,11 @@ const Guests = () => {
                   <Trash2 className="mr-2 h-4 w-4" /> Sélectionner
                 </Button>
                 <Button 
-                  onClick={() => { setSelectedGuest(null); setIsDialogOpen(true); }} 
+                  onClick={() => { 
+                    setSelectedGuest(null); 
+                    setSelectedTableId(""); // Reset selected table when creating new guest
+                    setIsDialogOpen(true); 
+                  }} 
                   className="bg-primary shadow-lg"
                 >
                   <Plus className="mr-2 h-4 w-4" /> Ajouter un invité
@@ -281,7 +367,14 @@ const Guests = () => {
                   variant="outline"
                   className="border-slate-300"
                 >
-                  <Users className="mr-2 h-4 w-4" /> Exporter
+                  <Users className="mr-2 h-4 w-4" /> Exporter CSV
+                </Button>
+                <Button 
+                  onClick={exportGuestsByTablePDF} 
+                  variant="outline"
+                  className="border-slate-300"
+                >
+                  <Users className="mr-2 h-4 w-4" /> Exporter PDF
                 </Button>
               </>
             ) : (
@@ -411,7 +504,7 @@ const Guests = () => {
                         variant="outline" 
                         size="sm" 
                         className="flex-1" 
-                        onClick={() => { setSelectedGuest(guest); setIsDialogOpen(true); }}
+                        onClick={() => handleOpenEditDialog(guest)}
                       >
                         <Edit className="h-4 w-4 mr-2" /> Éditer
                       </Button>
@@ -445,23 +538,57 @@ const Guests = () => {
 
               <div className="space-y-2">
                 <Label>Attribuer une table (Max 10 pers.)</Label>
-                <Select name="table" defaultValue={selectedGuest?.table || ""}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionnez une table" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tables.map((t) => {
-                      const count = getTableOccupancy(t.id);
-                      const isFull = count >= 10;
-                      return (
-                        <SelectItem key={t.id} value={t.id} disabled={isFull && (selectedGuest?.table !== t.id)}>
-                          {t.name} ({count}/10 places) - {t.category}
-                        </SelectItem>
-                      );
-                    })}
-                    {tables.length === 0 && <SelectItem value="none" disabled>Aucune table créée dans "Gestion Tables"</SelectItem>}
-                  </SelectContent>
-                </Select>
+                <input type="hidden" name="table" value={selectedTableId} />
+                <Popover open={openTableSelect} onOpenChange={setOpenTableSelect}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openTableSelect}
+                      className="w-full justify-between"
+                    >
+                      {selectedTableId
+                        ? `${tables.find((t) => t.id === selectedTableId)?.name} (${getTableOccupancy(selectedTableId)}/10 places) - ${tables.find((t) => t.id === selectedTableId)?.category}`
+                        : "Sélectionnez une table..."}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Rechercher une table..." />
+                      <CommandList>
+                        <CommandEmpty>Aucune table trouvée.</CommandEmpty>
+                        <CommandGroup>
+                          {tables.map((t) => {
+                            const count = getTableOccupancy(t.id);
+                            const isFull = count >= 10;
+                            const isDisabled = isFull && (selectedGuest?.table !== t.id);
+                            return (
+                              <CommandItem
+                                key={t.id}
+                                value={t.id}
+                                onSelect={(currentValue) => {
+                                  setSelectedTableId(currentValue);
+                                  setOpenTableSelect(false);
+                                }}
+                                disabled={isDisabled}
+                              >
+                                {t.name} ({count}/10 places) - {t.category}
+                                {isFull && (selectedGuest?.table !== t.id) && (
+                                  <span className="text-xs text-muted-foreground ml-2">(Complet)</span>
+                                )}
+                              </CommandItem>
+                            );
+                          })}
+                          {tables.length === 0 && (
+                            <CommandItem disabled>
+                              Aucune table créée dans "Gestion Tables"
+                            </CommandItem>
+                          )}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 <p className="text-[10px] text-slate-400 flex items-center gap-1">
                     <Info className="h-3 w-3" /> Seules les tables créées manuellement apparaissent ici.
                 </p>
