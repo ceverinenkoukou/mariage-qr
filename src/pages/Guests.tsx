@@ -62,6 +62,11 @@ const Guests = () => {
     const table = tables.find(t => String(t.id) === String(tableId));
     return table ? table.category : null;
   };
+  const getTableDescription = (tableId: any) => {
+    if (!tableId) return null;
+    const table = tables.find(t => String(t.id) === String(tableId));
+    return table ? table.description : null;
+  };
 
   // 3. Filtrage des invités avec recherche
   const filteredGuests = useMemo(() => {
@@ -244,24 +249,30 @@ const Guests = () => {
       const tableName = getTableName(guest.table) || 'Sans table';
       if (!guestsByTable[tableName]) guestsByTable[tableName] = [];
       guestsByTable[tableName].push(guest);
+      const getTableCategory = (tableId: any) => {
+        if (!tableId) return "N/A";
+        const table = tables.find((t: any) => String(t.id) === String(tableId));
+        return table ? table.category : "N/A"; 
+      }
     });
     doc.setFontSize(18);
     doc.text('Liste des Invités par Table', 20, 20);
     let yPosition = 30;
     Object.keys(guestsByTable).sort().forEach((tableName) => {
-      const tableGuests = guestsByTable[tableName];
+      const tableGuests = guestsByTable[tableName],
+        tableCategory = getTableCategory(tableGuests[0].table),tableDescription=getTableDescription(tableGuests[0].table);
       doc.setFontSize(14);
       doc.setFont(undefined, 'bold');
-      doc.text(`Table: ${tableName}`, 20, yPosition);
+      doc.text(`Table: ${tableName},${tableCategory},${tableDescription}`, 20, yPosition);
       yPosition += 10;
       const tableData = tableGuests.map(guest => [
         guest.name,
         guest.status,
-        guest.statut_guest === 'COUPLE' ? 'Couple' : guest.statut_guest === 'SINGLE' ? 'Seul' : 'Famille',
+       
         guest.scanned ? 'Oui' : 'Non'
       ]);
       autoTable(doc, {
-        head: [['Nom', 'Statut', 'Accompagnement', 'Scanné']],
+        head: [['Nom', 'Statut',  'Scanné']],
         body: tableData,
         startY: yPosition,
         margin: { left: 20, right: 20 },
